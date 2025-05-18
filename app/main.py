@@ -1,85 +1,139 @@
 import streamlit as st
-from .api_client import HuggingFaceClient
-from .utils import process_target_sentences, validate_inputs
-from .config import DEFAULT_SOURCE_SENTENCE, DEFAULT_TARGET_SENTENCES
+import torch
+import torch.nn.functional as F
+from sentence_transformers import SentenceTransformer, util
+from transformers import AutoTokenizer, AutoModel
 
-def setup_sidebar():
-    """Configure the app sidebar"""
-    with st.sidebar:
-        st.header("Instructions")
-        st.write("""
-        1. Enter your Hugging Face API token
-        2. Enter a source sentence to compare against
-        3. Enter target sentences (one per line)
-        4. Click "Calculate Similarity" to see results
-        """)
-        st.markdown("[Get API token](https://huggingface.co/settings/tokens)")
-        
-        st.header("About")
-        st.write("""
-        Uses the `msmarco-distilbert-base-tas-b` model for semantic similarity.
-        Scores range from 0 (no similarity) to 1 (very similar).
-        """)
+# Set up the app
+st.set_page_config(page_title="Sentence Similarity", layout="wide")
+st.title("Sentence Similarity Comparison")
 
-def display_results(source_sentence, target_sentences, similarities):
-    """Display the similarity results"""
-    st.header("Similarity Results")
-    st.write(f"Source sentence: **{source_sentence}**")
-    
-    # Create results table
-    results = []
-    for sentence, similarity in zip(target_sentences, similarities):
-        results.append({
-            "Target Sentence": sentence,
-            "Similarity Score": f"{similarity:.3f}",
-            "Match Percentage": f"{similarity*100:.0f}%"
-        })
-    
-    st.table(results)
-    
-    # Add visualization
-    st.subheader("Similarity Visualization")
-    st.bar_chart(
-        data={sentence: similarity for sentence, similarity in zip(target_sentences, similarities)},
-        height=400
-    )
+# Model selection
+model_name = st.sidebar.selectbox(
+    "Select Model",
+    [
+        "sentence-transformers/all-mpnet-base-v2",
+        "sentence-transformers/all-MiniLM-L6-v2",
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    ],
+    index=0
+)
 
-def main():
-    """Main app function"""
-    st.set_page_config(page_title="Sentence Similarity", layout="wide")
-    st.title("Sentence Similarity Comparison")
-    
-    setup_sidebar()
-    
-    # Input section
-    api_token = st.text_input("Hugging Face API Token:", type="password")
-    source_sentence = st.text_area(
-        "Source sentence:", 
-        DEFAULT_SOURCE_SENTENCE
-    )
-    target_sentences_text = st.text_area(
-        "Target sentences (one per line):", 
-        DEFAULT_TARGET_SENTENCES,
-        height=150
-    )
-    target_sentences = process_target_sentences(target_sentences_text)
-    
-    # Calculate button
-    if st.button("Calculate Similarity"):
-        error = validate_inputs(api_token, source_sentence, target_sentences)
-        if error:
-            st.error(error)
-            return
-            
+# Initialize model (cached to avoid reloading)
+@st.cache_resource
+def load_model(model_name):
+    try:
+        # Try loading with sentence-transformers first (simpler)
+        return SentenceTransformer(model_name), None
+    except:
+        # Fall back to transformers + manual pooling
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModel.from_pretrained(model_name)
+        return model, tokenizer
+
+model, tokenizer = load_model(model_name)
+
+def calculate_similarity(source_sentence, target_sentences):
+    """Calculate similarity scores using the selected model"""
+    if tokenizer is None:
+        # Using sentence-transformers
+        source_embedding = model.encode(source_sentence, convert_to_tensor=True)
+        target_embeddings = model.encode(target_sentences, convert_to_tensor=True)
+        similarities = util.cos_sim(source_embedding, target_embeddings)[0]
+        return similarities.tolist()
+    else:
+        # Using transformers with manual pooling
+        def mean_pooling(model_output, attention_mask):
+            token_embeddings = model_output[0]
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
+        # Encode source
+        encoded_source = tokenizer([source_sentence], padding=True, truncation=True, return_tensors='pt')
+        with torch.no_grad():
+            model_output = model(**encoded_source)
+        source_embedding = mean_pooling(model_output, encoded_source['attention_mask'])
+        source_embedding = F.normalize(source_embedding, p=2, dim=1)
+
+        # Encode targets
+        encoded_targets = tokenizer(target_sentences, padding=True, truncation=True, return_tensors='pt')
+        with torch.no_grad():
+            model_output = model(**encoded_targets)
+        target_embeddings = mean_pooling(model_output, encoded_targets['attention_mask'])
+        target_embeddings = F.normalize(target_embeddings, p=2, dim=1)
+
+        # Calculate similarities
+        similarities = F.cosine_similarity(source_embedding, target_embeddings)
+        return similarities.tolist()
+
+# Input section
+source_sentence = st.text_area(
+    "Source sentence to compare against:",
+    "Machine learning is so easy."
+)
+
+target_sentences = st.text_area(
+    "Target sentences to compare (one per line):",
+    "Deep learning is so straightforward.\nThis is so difficult, like rocket science.\nI can't believe how much I struggled with this.",
+    height=150
+)
+
+# Process input
+target_list = [s.strip() for s in target_sentences.split('\n') if s.strip()]
+
+# Calculate button
+if st.button("Calculate Similarity"):
+    if not source_sentence.strip():
+        st.error("Please enter a source sentence.")
+    elif not target_list:
+        st.error("Please enter at least one target sentence.")
+    else:
         with st.spinner("Calculating similarities..."):
             try:
-                client = HuggingFaceClient(api_token)
-                similarities = client.get_similarity_scores(source_sentence, target_sentences)
-                display_results(source_sentence, target_sentences, similarities)
-            except requests.exceptions.RequestException as e:
-                st.error(f"API request failed: {str(e)}")
+                similarities = calculate_similarity(source_sentence, target_list)
+                
+                # Display results
+                st.subheader("Results")
+                st.write(f"Using model: `{model_name}`")
+                
+                # Create results table
+                results = []
+                for sentence, similarity in zip(target_list, similarities):
+                    results.append({
+                        "Target Sentence": sentence,
+                        "Similarity Score": f"{similarity:.3f}",
+                        "Match": f"{similarity*100:.1f}%"
+                    })
+                
+                st.table(results)
+                
+                # Visualization
+                st.subheader("Similarity Visualization")
+                st.bar_chart(
+                    data={sentence: sim for sentence, sim in zip(target_list, similarities)},
+                    height=400
+                )
+                
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
 
-if __name__ == "__main__":
-    main()
+# Sidebar info
+st.sidebar.header("About")
+st.sidebar.write("""
+This app calculates semantic similarity between sentences using state-of-the-art transformer models.
+
+**Key Features:**
+- Multiple model options
+- No API token required
+- Runs completely locally after initial download
+""")
+
+st.sidebar.header("Model Information")
+st.sidebar.write(f"""
+Selected Model: `{model_name}`
+
+**Available Models:**
+1. `all-mpnet-base-v2` - Best quality (768-dimensional embeddings)
+2. `all-MiniLM-L6-v2` - Good balance (384-dimensional)
+3. `paraphrase-multilingual` - For multilingual text
+""")
