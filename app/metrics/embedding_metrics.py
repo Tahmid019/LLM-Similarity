@@ -12,7 +12,7 @@ def calculate_sentence_bert_similarity(model, sentence1, sentence2):
     return util.pytorch_cos_sim(embedding1, embedding2).item()
 
 def calculate_bertscore_f1(reference_sentence, candidate_sentence):
-    P, R, F1 = bert_score_calc([candidate_sentence], [reference_sentence], lang="en", verbose=False)
+    P, R, F1 = bert_score_calc([candidate_sentence], [reference_sentence], lang="en", verbose=False, idf=False)
     return F1.item()
 
 # def calculate_comet_score(source_sentence, mt_sentence, reference_sentence):
