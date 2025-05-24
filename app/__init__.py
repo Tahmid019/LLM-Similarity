@@ -8,12 +8,20 @@ VERBOSE = 15
 NOTICE = 25
 MSG = 35
 MSG2 = 45 # train_speaker_encoder.py
+INFO2 = 55
 
+logging.addLevelName(INFO2, "INFO2")
 logging.addLevelName(TRACE, "TRACE")
 logging.addLevelName(VERBOSE, "VERBOSE")
 logging.addLevelName(NOTICE, "NOTICE")
 logging.addLevelName(MSG, "MSG")
 logging.addLevelName(MSG2, "MSG2")
+
+
+def info2(self, message, *args, **kws):
+    if self.isEnabledFor(INFO2):
+        self._log(INFO2, message, args, **kws)
+logging.Logger.info2 = info2
 
 def trace(self, message, *args, **kws):
     if self.isEnabledFor(TRACE):

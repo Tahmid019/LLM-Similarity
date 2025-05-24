@@ -10,25 +10,33 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from app.__init__ import logger
 
 def calculate_bleu(reference_sentences, candidate_sentence):
-    # NLTK expects tokenized input
+    logger.info2("Calculating Bleu ...")
     reference_tokens = [ref.split() for ref in reference_sentences]
     candidate_tokens = candidate_sentence.split()
     smoothie = SmoothingFunction().method4
-    return sentence_bleu(reference_tokens, candidate_tokens, smoothing_function=smoothie) / 100
+    score = sentence_bleu(reference_tokens, candidate_tokens, smoothing_function=smoothie) / 100 
+    logger.info2(">>>")
+    return score
 
 
 def calculate_meteor(reference, hypothesis):
+    logger.info2("Calculating Meteor ...")
     try:
-        return meteor_score([word_tokenize(reference)], word_tokenize(hypothesis))
+        score = meteor_score([word_tokenize(reference)], word_tokenize(hypothesis))
+        logger.info2(">>>")
+        return score
     except Exception as e:
-        logger.debug(f"Note: METEOR encountered an issue with '{hypothesis}', score set to 0. Error: {e}")
+        logger.error(f"Note: METEOR encountered an issue with '{hypothesis}', score set to 0. Error: {e}")
         return 0.0
     
     
 def calculate_rouge_l_f1(reference_sentence, candidate_sentence):
+    logger.info2("Calculating Rouge_l_F1 ...")
     scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
     scores = scorer.score(reference_sentence, candidate_sentence)
-    return scores['rougeL'].fmeasure
+    score = scores['rougeL'].fmeasure 
+    logger.info2(">>>")
+    return score
 
 
 def calculate_chrf(source: str, target: str) -> float:
@@ -42,5 +50,7 @@ def calculate_chrf(source: str, target: str) -> float:
     Returns:
         float: chrF score (0-100)
     """
+    logger.info2("Calculating Chrf ...")
     score = sacrebleu.sentence_chrf(target, [source]).score
+    logger.info2(">>>")
     return score
