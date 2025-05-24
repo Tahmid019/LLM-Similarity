@@ -1,53 +1,33 @@
-import torch
-from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
-import torch
 import re
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-llm_model_name = "google/flan-t5-small" 
+def load_flan_t5_model(model_name="google/flan-t5-small"):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    return tokenizer, model, device
 
-tokenizer_llm = AutoTokenizer.from_pretrained(llm_model_name)
-model_llm = AutoModelForSeq2SeqLM.from_pretrained(llm_model_name)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_llm.to(device)
-print(f"Loaded LLM: {llm_model_name}")
-
-
-# qa_pipeline = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
-# text_generator = pipeline("text-generation", model="gpt2") # Or a more capable model
-
-def get_llm_similarity_score_prompt(llm_pipeline, sentence1, sentence2):
-    
+def get_llm_similarity_score_flan_t5(tokenizer, model, device, sentence1, sentence2):
     prompt = f"""
-    Rate the semantic similarity between the following two sentences on a continuous scale from 0 to 1, 
-    where 0 means no similarity and 1 means perfect semantic equivalence.
     Sentence 1: "{sentence1}"
     Sentence 2: "{sentence2}"
-    Similarity Score (0-1):
+    Question: How semantically similar are Sentence 1 and Sentence 2?
+    Provide a similarity score from 0.0 (not similar) to 1.0 (identical in meaning).
+    Answer (Score only, e.g., 0.75):
     """
-    
-    inputs = tokenizer_llm(prompt, return_tensors="pt", max_length=512, truncation=True)
+
+    inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
     inputs = inputs.to(device)
 
-    outputs = model_llm.generate(**inputs, max_new_tokens=10) # Generate a short response
-    response_text = tokenizer_llm.decode(outputs[0], skip_special_tokens=True)
-    
-    match = re.search(r"(\d\.\d+)", response_text)
+    outputs = model.generate(**inputs, max_new_tokens=10)
+    response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
+    match = re.search(r"(\d\.\d+)", response_text)
     if match:
         try:
             return float(match.group(1))
         except ValueError:
-            return f"Could not parse float from: {response_text}"
-    else:
-        return f"Could not find score in: {response_text}"
-
-
-
-def calculate_sentence_log_prob(tokenizer, model, sentence):
-    inputs = tokenizer(sentence, return_tensors="pt")
-    input_ids = inputs.input_ids
-    with torch.no_grad():
-        outputs = model(input_ids, labels=input_ids)
-        log_likelihood = outputs.loss.item() * input_ids.shape[1] # Unnormalized
-    return -log_likelihood # Higher is better (less negative)
+            raise ValueError(f"Could not parse float from: {response_text}")
+    raise ValueError(f"Could not find score in: {response_text}")

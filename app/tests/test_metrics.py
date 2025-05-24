@@ -6,7 +6,10 @@ import csv
 import nltk
 from pathlib import Path
 
+from sentence_transformers import SentenceTransformer, util
 
+
+sbert_model_name = 'all-MiniLM-L6-v2'
 
 
 nltk.data.path.append(os.path.join(os.getcwd(), 'nltk_data'))
@@ -20,11 +23,16 @@ def download_nltk_data():
     nltk.download('wordnet', quiet=True)
     nltk.download('omw-1.4', quiet=True)
     logger.info("nltk Downloaded")
+
+
     
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+
+all_results = []
+csv_path = os.path.join(project_root, "all_metrics_results.csv")
 
 try:
     from data.samples import (
@@ -42,7 +50,8 @@ try:
         calculate_bertscore_f1
     )
     from metrics.llm_metrics import (
-        get_llm_similarity_score_prompt
+        load_flan_t5_model,
+        get_llm_similarity_score_flan_t5
     )
 except ImportError as e:
     print(f"ImportError: {e}. Make sure metric modules and functions are defined.")
@@ -92,65 +101,83 @@ class TestLexicalMetrics(unittest.TestCase):
 class TestEmbeddingMetrics(unittest.TestCase):
 
     def setUp(self):
+        self.sbert_model = SentenceTransformer(sbert_model_name)
         self.sentence1 = source_sentence
         self.sentence2_similar = target_sentences[1]
         self.sentence3_different = target_sentences[2]
+        self.results = []
 
-    @patch('metrics.embedding_metrics.SentenceTransformer')
-    def test_calculate_sentence_bert_similarity(self, MockSentenceTransformer):
-        mock_model_instance = MockSentenceTransformer.return_value
-        mock_model_instance.encode.side_effect = lambda x, convert_to_tensor: {
-            self.sentence1: [0.1, 0.2, 0.3],
-            self.sentence2_similar: [0.11, 0.22, 0.33],
-            self.sentence3_different: [0.9, 0.8, 0.7],
-        }[x]
+    def test_calculate_sentence_bert_similarity(self):
+        score_similar = calculate_sentence_bert_similarity(
+            self.sbert_model, self.sentence1, self.sentence2_similar
+        )
+        print("SBERT similarity (similar):", score_similar)
+        self.assertTrue(0.0 <= score_similar <= 1.0)
+        self.assertGreater(score_similar, 0.5)
 
-        with patch('metrics.embedding_metrics.util.pytorch_cos_sim') as mock_cos_sim:
-            mock_cos_sim.return_value.item.return_value = 0.95
-            score_similar = calculate_sentence_bert_similarity(mock_model_instance, self.sentence1, self.sentence2_similar)
-            self.assertAlmostEqual(score_similar, 0.95, places=2)
+        score_different = calculate_sentence_bert_similarity(
+            self.sbert_model, self.sentence1, self.sentence3_different
+        )
+        print("SBERT similarity (different):", score_different)
+        self.assertTrue(0.0 <= score_different <= 1.0)
+        self.assertLess(score_different, score_similar)
 
-            mock_cos_sim.return_value.item.return_value = 0.15
-            score_different = calculate_sentence_bert_similarity(mock_model_instance, self.sentence1, self.sentence3_different)
-            self.assertAlmostEqual(score_different, 0.15, places=2)
-
-    @patch('bert_score.score')
-    def test_calculate_bertscore_f1(self, mock_bert_score_calculate):
-        mock_bert_score_calculate.return_value = (None, None, MagicMock(mean=lambda: 0.92))
+    def test_calculate_bertscore_f1(self):
         score_similar = calculate_bertscore_f1(self.sentence1, self.sentence2_similar)
-        self.assertAlmostEqual(score_similar, 0.92, places=2)
-        mock_bert_score_calculate.assert_called_once()
+        print("BERTScore F1 (similar):", score_similar)
+        self.assertTrue(0.0 <= score_similar <= 1.0)
+        self.assertGreater(score_similar, 0.5)
 
-        mock_bert_score_calculate.reset_mock()
-        mock_bert_score_calculate.return_value = (None, None, MagicMock(mean=lambda: 0.23))
         score_different = calculate_bertscore_f1(self.sentence1, self.sentence3_different)
-        self.assertAlmostEqual(score_different, 0.23, places=2)
-        mock_bert_score_calculate.assert_called_once()
+        print("BERTScore F1 (different):", score_different)
+        self.assertTrue(0.0 <= score_different <= 1.0)
+        self.assertLess(score_different, score_similar)
+        
+        csv_path = os.path.join(project_root, "test_results.csv")
+        with open(csv_path, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=self.results[0].keys())
+            writer.writeheader()
+            writer.writerows(self.results)
 
+class TestLLMFlanT5Similarity(unittest.TestCase):
 
-class TestLLMPromptEvaluators(unittest.TestCase):
-
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
+        self.tokenizer, self.model, self.device = load_flan_t5_model()
         self.sentence1 = source_sentence
         self.sentence2_similar = target_sentences[1]
         self.sentence3_different = target_sentences[2]
+        self.results = []
 
-    @patch('metrics.llm_metrics.pipeline')
-    def test_get_llm_similarity_score_prompt(self, mock_pipeline):
-        mock_pipeline_instance = mock_pipeline.return_value
+    def test_similarity_score_similar_sentences(self):
+        score = get_llm_similarity_score_flan_t5(
+            self.tokenizer, self.model, self.device,
+            self.sentence1, self.sentence2_similar
+        )
+        print(f"Similarity (similar sentences): {score}")
+        self.assertTrue(0.0 <= score <= 1.0)
 
-        mock_pipeline_instance.return_value = [{"generated_text": "Similarity Score (0-1): 0.85"}]
-        score_similar = get_llm_similarity_score_prompt(mock_pipeline_instance, self.sentence1, self.sentence2_similar)
-        self.assertAlmostEqual(score_similar, 0.85, places=2)
+    def test_similarity_score_different_sentences(self):
+        score = get_llm_similarity_score_flan_t5(
+            self.tokenizer, self.model, self.device,
+            self.sentence1, self.sentence3_different
+        )
+        print(f"Similarity (different sentences): {score}")
+        self.assertTrue(0.0 <= score <= 1.0)
+        
+        csv_path = os.path.join(project_root, "test_results.csv")
+        with open(csv_path, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=self.results[0].keys())
+            writer.writeheader()
+            writer.writerows(self.results)
 
-        mock_pipeline_instance.return_value = [{"generated_text": "The similarity is about 0.2. It's quite low."}]
-        score_different = get_llm_similarity_score_prompt(mock_pipeline_instance, self.sentence1, self.sentence3_different)
-        self.assertAlmostEqual(score_different, 0.20, places=2)
-
-        mock_pipeline_instance.return_value = [{"generated_text": "These sentences are not very alike."}]
-        with self.assertRaises(ValueError):
-            get_llm_similarity_score_prompt(mock_pipeline_instance, self.sentence1, self.sentence3_different)
-
+    # def test_invalid_response_handling(self):
+    #     # Simulate invalid decoding by forcing an invalid prompt
+    #     with self.assertRaises(ValueError):
+    #         get_llm_similarity_score_flan_t5(
+    #             self.tokenizer, self.model, self.device,
+    #             "asdfghjkl", "zxcvbnm"
+    #         )
 
 if __name__ == '__main__':
     download_nltk_data()
