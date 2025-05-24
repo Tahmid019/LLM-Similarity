@@ -5,3 +5,4 @@ sentence_transformers==4.1.0
 streamlit==1.45.1
 torch==2.7.0
 transformers==4.52.3
+openpyxl

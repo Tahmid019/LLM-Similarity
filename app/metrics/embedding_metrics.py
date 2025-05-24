@@ -1,3 +1,4 @@
+import torch
 from sentence_transformers import SentenceTransformer, util
 from bert_score import score as bert_score_calc
 import sys
@@ -9,6 +10,12 @@ from app.__init__ import logger
 def load_sbert_model():
     logger.info2("Loading SBert Model ...")
     sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    sbert_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+    logger.info2(">>>")
+    return sbert_model
+    
     logger.info2(">>>")
     return sbert_model
 
