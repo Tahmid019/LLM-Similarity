@@ -91,38 +91,38 @@ else:
             st.error(f"Failed to read file: {e}")
             st.stop()
 
-        required = ["source", "target"]
-        if not all(col in df.columns for col in required):
-            st.error(f"File must contain columns: {required}")
-        else:
-            total = len(df)
-            progress = st.progress(0)
-            results = []
-            for i, row in df.iterrows():
-                src = row[0]
-                tgt = row[1]
-                # compute metrics
-                res = {
-                    "source": src,
-                    "target": tgt,
-                    "BLEU": calculate_bleu(src, tgt),
-                    "ROUGE-L": calculate_rouge_l_f1(src, tgt),
-                    "METEOR": calculate_meteor(src, tgt),
-                    "chrF": calculate_chrf(src, tgt),
-                    "SBERT": calculate_sentence_bert_similarity(sbert_model, src, tgt),
-                    "BERTScore": calculate_bertscore_f1(tgt, src),
-                    "Flan-T5": get_llm_similarity_score_flan_t5(tokenizer, flan_model, device, src, tgt)
-                }
-                results.append(res)
-                # update progress
-                progress.progress((i + 1) / total)
+        # required = ["source", "target"] or []
+        # if not all(col in df.columns for col in required):
+        #     st.error(f"File must contain columns: {required}")
+        # else:
+        total = len(df)
+        progress = st.progress(0)
+        results = []
+        for i, row in df.iterrows():
+            src = row[0]
+            tgt = row[1]
+            # compute metrics
+            res = {
+                "source": src,
+                "target": tgt,
+                "BLEU": calculate_bleu(src, tgt),
+                "ROUGE-L": calculate_rouge_l_f1(src, tgt),
+                "METEOR": calculate_meteor(src, tgt),
+                "chrF": calculate_chrf(src, tgt),
+                "SBERT": calculate_sentence_bert_similarity(sbert_model, src, tgt),
+                "BERTScore": calculate_bertscore_f1(tgt, src),
+                "Flan-T5": get_llm_similarity_score_flan_t5(tokenizer, flan_model, device, src, tgt)
+            }
+            results.append(res)
+            # update progress
+            progress.progress((i + 1) / total)
 
-            res_df = pd.DataFrame(results)
-            st.subheader("Batch Similarity Results")
-            st.dataframe(res_df)
-            st.download_button(
-                label="Download Batch Results as CSV", 
-                data=res_df.to_csv(index=False), 
-                file_name="batch_similarity.csv"
-            )
+        res_df = pd.DataFrame(results)
+        st.subheader("Batch Similarity Results")
+        st.dataframe(res_df)
+        st.download_button(
+            label="Download Batch Results as CSV", 
+            data=res_df.to_csv(index=False), 
+            file_name="batch_similarity.csv"
+        )
 
