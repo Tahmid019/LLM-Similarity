@@ -14,7 +14,7 @@ def calculate_bleu(reference_sentences, candidate_sentence):
     reference_tokens = [ref.split() for ref in reference_sentences]
     candidate_tokens = candidate_sentence.split()
     smoothie = SmoothingFunction().method4
-    score = sentence_bleu(reference_tokens, candidate_tokens, smoothing_function=smoothie) / 100 
+    score = sentence_bleu(reference_tokens, candidate_tokens, smoothing_function=smoothie)*100
     logger.info2(">>>")
     return score
 
