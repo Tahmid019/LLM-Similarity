@@ -2,12 +2,10 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 
-# import your metric functions
 from metrics.lexical_metrics import calculate_bleu, calculate_rouge_l_f1, calculate_meteor, calculate_chrf
 from metrics.embedding_metrics import load_sbert_model, calculate_sentence_bert_similarity, calculate_bertscore_f1
 from metrics.llm_metrics import load_flan_t5_model, get_llm_similarity_score_flan_t5
 
-# load models once
 def load_models():
     sbert_model = load_sbert_model()
     tokenizer, flan_model, device = load_flan_t5_model()
@@ -30,7 +28,6 @@ if mode == "Single Pair":
         if not (src and tgt):
             st.error("Please provide both source and target sentences.")
         else:
-            # Initialize progress bar
             total_steps = 7
             progress = st.progress(0)
             step = 0
