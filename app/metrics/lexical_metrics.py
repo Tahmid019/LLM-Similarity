@@ -15,7 +15,7 @@ def calculate_bleu(source, target):
     tokenized_src = normalize_text(source).split()
     tokenized_tgt = normalize_text(target).split()
     smoothie = SmoothingFunction().method4
-    score = sentence_bleu([tokenized_src], tokenized_tgt, smoothing_function=smoothie) / 100 
+    score = sentence_bleu(reference_tokens, candidate_tokens, smoothing_function=smoothie)*100
     logger.info2(">>>")
     return score
 
