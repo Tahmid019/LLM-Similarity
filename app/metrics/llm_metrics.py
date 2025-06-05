@@ -37,7 +37,7 @@ def get_llm_similarity_score_flan_t5(tokenizer, model, device, sentence1, senten
         try:
             score = float(match.group(1))
             logger.info2(">>>")
-            return score
+            return score * 100
         except ValueError:
             logger.error(f"Could not parse float from: {response_text}")
             raise ValueError(f"Could not parse float from: {response_text}")

@@ -23,9 +23,9 @@ def calculate_bleu(source, target):
 def calculate_meteor(source, target):
     logger.info2("Calculating Meteor ...")
     try:
-        score = single_meteor_score(source, target)
-        logger.info2(">>>")
-        return score
+        score = single_meteor_score(source.split(), target.split())
+        logger.info2(f"Meteor:{score}>>>")
+        return score*100
     except Exception as e:
         logger.error(f"Note: METEOR encountered an issue with '{target}', score set to 0. Error: {e}")
         return 0.0
@@ -37,7 +37,7 @@ def calculate_rouge_l_f1(source, target):
     scores = scorer.score(source, target)
     score = scores['rougeL'].fmeasure 
     logger.info2(">>>")
-    return score
+    return score * 100
 
 
 def calculate_chrf(source: str, target: str) -> float:
