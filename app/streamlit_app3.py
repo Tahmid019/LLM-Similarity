@@ -1,10 +1,13 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
+import os
 
 from metrics.lexical_metrics import calculate_bleu, calculate_rouge_l_f1, calculate_meteor, calculate_chrf
 from metrics.embedding_metrics import load_sbert_model, calculate_sentence_bert_similarity, calculate_bertscore_f1
 from metrics.llm_metrics import load_flan_t5_model, get_llm_similarity_score_flan_t5
+
+os.environ["STREAMLIT_SERVER_RUN_ON_SAVE"] = "false"
 
 def load_models():
     sbert_model = load_sbert_model()
