@@ -12,11 +12,11 @@ from app.__init__ import logger
 
 def calculate_bleu(source, target):
     logger.info2("Calculating Bleu ...")
-    tokenized_src = normalize_text(source).split()
+    tokenized_src = [normalize_text(source).split()]
     tokenized_tgt = normalize_text(target).split()
     smoothie = SmoothingFunction().method4
     score = sentence_bleu(tokenized_src, tokenized_tgt, smoothing_function=smoothie)*100
-    logger.info2(">>>")
+    logger.info2(f"Bleu score reff: {score}>>>")
     return score
 
 
